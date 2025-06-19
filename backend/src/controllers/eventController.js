@@ -9,12 +9,25 @@ const getAllEvents = async (req, res) => {
             fullName: true,
           },
         },
+        participants: {
+          select: {
+            id: true,
+          },
+        },
       },
       orderBy: {
         startDatetime: "desc",
       },
     });
-    res.json(events);
+
+    // Add participant count to each event
+    const eventsWithParticipantCount = events.map(event => ({
+      ...event,
+      participantCount: event.participants.length,
+      participants: undefined, // Remove the participants array from response
+    }));
+
+    res.json(eventsWithParticipantCount);
   } catch (error) {
     console.error("Error fetching events:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -31,6 +44,11 @@ const getEventById = async (req, res) => {
             fullName: true,
           },
         },
+        participants: {
+          select: {
+            id: true,
+          },
+        },
       },
     });
 
@@ -38,7 +56,14 @@ const getEventById = async (req, res) => {
       return res.status(404).json({ error: "Event not found" });
     }
 
-    res.json(event);
+    // Add participant count to the event
+    const eventWithParticipantCount = {
+      ...event,
+      participantCount: event.participants.length,
+      participants: undefined, // Remove the participants array from response
+    };
+
+    res.json(eventWithParticipantCount);
   } catch (error) {
     console.error("Error fetching event:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -63,13 +88,21 @@ const createEvent = async (req, res) => {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
+  // Validate that end date is after start date
+  const startDate = new Date(start_datetime);
+  const endDate = new Date(end_datetime);
+
+  if (endDate <= startDate) {
+    return res.status(400).json({ error: "End date must be after start date" });
+  }
+
   try {
     const event = await prisma.event.create({
       data: {
         name,
         description,
-        startDatetime: new Date(start_datetime),
-        endDatetime: new Date(end_datetime),
+        startDatetime: startDate,
+        endDatetime: endDate,
         location,
         minAttendees: min_attendees,
         maxAttendees: max_attendees,
@@ -114,6 +147,18 @@ const updateEvent = async (req, res) => {
       return res
         .status(403)
         .json({ error: "Not authorized to update this event" });
+    }
+
+    // Validate that end date is after start date if both are provided
+    if (start_datetime && end_datetime) {
+      const startDate = new Date(start_datetime);
+      const endDate = new Date(end_datetime);
+
+      if (endDate <= startDate) {
+        return res
+          .status(400)
+          .json({ error: "End date must be after start date" });
+      }
     }
 
     const updatedEvent = await prisma.event.update({

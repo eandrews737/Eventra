@@ -133,20 +133,6 @@ npm run lint              # Run ESLint
 npm run lint:fix          # Fix linting issues
 ```
 
-### Test Environment Setup
-
-#### Backend Test Environment
-- **Database**: Separate test database with automatic cleanup
-- **Environment Variables**: Test-specific configuration
-- **Mocking**: Rate limiting and external services
-- **Isolation**: Each test runs in isolation with fresh data
-
-#### Frontend Test Environment
-- **Mocking**: API services, localStorage, browser APIs
-- **Providers**: Context providers for testing
-- **User Interactions**: Simulated user events
-- **Async Operations**: Proper handling of async code
-
 ## Data Models and Relations
 
 ### User Model
@@ -224,7 +210,6 @@ All API endpoints return JSON responses with the following structure:
 
 - **Success**: `{ data: {...} }` or direct data object
 - **Error**: `{ error: "Error message" }`
-- **Authentication**: JWT tokens in Authorization header (`Bearer <token>`)
 
 ## Development Setup
 
@@ -286,12 +271,6 @@ REACT_APP_API_URL="http://localhost:3001/api"
 
 ## Code Quality & Best Practices
 
-### Linting and Formatting
-- **Backend**: ESLint with Standard configuration
-- **Frontend**: ESLint with React App configuration
-- **Prettier**: Code formatting (recommended)
-- **TypeScript**: Type safety (planned implementation)
-
 ### Pre-commit Hooks
 - Run tests before committing
 - Check linting rules
@@ -303,72 +282,6 @@ REACT_APP_API_URL="http://localhost:3001/api"
 - Automated testing on all PRs
 - Code coverage requirements
 - Security review for sensitive changes
-
-## CI/CD Pipeline
-
-### GitHub Actions Workflow
-
-```yaml
-name: CI/CD Pipeline
-
-on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        cache: 'npm'
-    
-    - name: Install dependencies
-      run: |
-        cd backend && npm ci
-        cd ../frontend && npm ci
-    
-    - name: Run backend tests
-      run: |
-        cd backend
-        npm test -- --coverage --watchAll=false
-    
-    - name: Run frontend tests
-      run: |
-        cd frontend
-        npm test -- --coverage --watchAll=false --passWithNoTests
-    
-    - name: Build frontend
-      run: |
-        cd frontend
-        npm run build
-    
-    - name: Upload coverage reports
-      uses: codecov/codecov-action@v3
-```
-
-### Deployment Strategy
-- **Staging**: Automatic deployment to staging environment
-- **Production**: Manual approval with automated deployment
-- **Rollback**: Quick rollback capability with database migrations
-- **Monitoring**: Health checks and performance monitoring
 
 ## Security Features
 
@@ -418,8 +331,6 @@ jobs:
 ### Application Monitoring
 - **Morgan**: HTTP request logging with custom formats
 - **Error Tracking**: Centralized error handling and reporting
-- **Performance Monitoring**: Response time tracking and optimization
-- **Health Checks**: Application and database health monitoring
 
 ### Database Monitoring
 - **Query Performance**: Slow query identification and optimization

@@ -17,33 +17,40 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    // Set up a listener for authentication failures
+    const handleAuthError = () => {
+      setUser(null);
+    };
+    window.addEventListener("auth-error", handleAuthError);
+
+    // Check authentication status on initial load
     checkAuth();
+
+    // Clean up the listener on component unmount
+    return () => {
+      window.removeEventListener("auth-error", handleAuthError);
+    };
   }, []);
 
   const checkAuth = async () => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      try {
-        const response = await authAPI.getProfile();
-        setUser(response.data);
-      } catch (err) {
-        localStorage.removeItem("token");
-        setUser(null);
-      }
+    try {
+      const response = await authAPI.getProfile();
+      setUser(response.data);
+    } catch (err) {
+      setUser(null);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const login = async (credentials) => {
     try {
       setError(null);
       const response = await authAPI.login(credentials);
-      const { token } = response.data;
-      localStorage.setItem("token", token);
       await checkAuth();
       return response.data;
     } catch (err) {
-      setError(err.response?.data?.message || "Login failed");
+      setError(err.response?.data?.error || "Login failed");
       throw err;
     }
   };
@@ -52,12 +59,10 @@ export const AuthProvider = ({ children }) => {
     try {
       setError(null);
       const response = await authAPI.register(userData);
-      const { token } = response.data;
-      localStorage.setItem("token", token);
       await checkAuth();
       return response.data;
     } catch (err) {
-      setError(err.response?.data?.message || "Registration failed");
+      setError(err.response?.data?.error || "Registration failed");
       throw err;
     }
   };
@@ -68,7 +73,6 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.error("Logout error:", err);
     } finally {
-      localStorage.removeItem("token");
       setUser(null);
     }
   };

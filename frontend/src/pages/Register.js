@@ -1,16 +1,22 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import ThemeToggle from "../components/ThemeToggle";
+import PageLayout from "../components/PageLayout";
+import FormContainer from "../components/FormContainer";
+import FormInput from "../components/FormInput";
+import Button from "../components/Button";
+import ErrorMessage from "../components/ErrorMessage";
 
 const Register = () => {
   const [formData, setFormData] = useState({
+    name: "",
     email: "",
     password: "",
-    fullName: "",
+    confirmPassword: "",
   });
   const [loading, setLoading] = useState(false);
-  const { register, error } = useAuth();
+  const [error, setError] = useState(null);
+  const { register } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -23,11 +29,23 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
+
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match");
+      setLoading(false);
+      return;
+    }
 
     try {
-      await register(formData);
+      await register({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+      });
       navigate("/dashboard");
     } catch (err) {
+      setError(err.response?.data?.message || "Failed to register");
       console.error("Registration error:", err);
     } finally {
       setLoading(false);
@@ -35,94 +53,87 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div className="flex justify-end">
-          <ThemeToggle />
-        </div>
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-            Create your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-300">
-            Or{" "}
-            <Link
-              to="/login"
-              className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
-            >
-              sign in to your existing account
-            </Link>
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="fullName" className="sr-only">
-                Full Name
-              </label>
-              <input
-                id="fullName"
-                name="fullName"
-                type="text"
-                autoComplete="name"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-700 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Full Name"
-                value={formData.fullName}
-                onChange={handleChange}
-              />
-            </div>
-            <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-700 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Email address"
-                value={formData.email}
-                onChange={handleChange}
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-700 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-                value={formData.password}
-                onChange={handleChange}
-              />
-            </div>
-          </div>
+    <PageLayout
+      title="Create your account"
+      subtitle={
+        <>
+          Or{" "}
+          <Link
+            to="/login"
+            className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
+          >
+            sign in to your existing account
+          </Link>
+        </>
+      }
+      maxWidth="sm"
+      centerContent
+    >
+      <FormContainer>
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+          <ErrorMessage message={error} />
+          
+          <FormInput
+            label="Full Name"
+            id="name"
+            name="name"
+            type="text"
+            autoComplete="name"
+            required
+            placeholder="Full Name"
+            value={formData.name}
+            onChange={handleChange}
+          />
 
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-colors duration-200"
-            >
-              {loading ? "Creating account..." : "Create account"}
-            </button>
-          </div>
+          <FormInput
+            label="Email address"
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            placeholder="Email address"
+            value={formData.email}
+            onChange={handleChange}
+          />
+
+          <FormInput
+            label="Password"
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            required
+            placeholder="Password"
+            value={formData.password}
+            onChange={handleChange}
+          />
+
+          <FormInput
+            label="Confirm Password"
+            id="confirmPassword"
+            name="confirmPassword"
+            type="password"
+            autoComplete="new-password"
+            required
+            placeholder="Confirm Password"
+            value={formData.confirmPassword}
+            onChange={handleChange}
+          />
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="large"
+            loading={loading}
+            disabled={loading}
+            className="w-full"
+          >
+            {loading ? "Creating account..." : "Create account"}
+          </Button>
         </form>
-      </div>
-    </div>
+      </FormContainer>
+    </PageLayout>
   );
 };
 

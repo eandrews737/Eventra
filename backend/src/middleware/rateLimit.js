@@ -41,15 +41,9 @@ const authLimiter = createRateLimiter({
   max: process.env.AUTH_RATE_LIMIT_MAX || 5, // 5 attempts per 15 minutes for auth
   message: process.env.AUTH_RATE_LIMIT_MESSAGE || 'Too many authentication attempts, please try again later.'
 });
-const apiKeyLimiter = createRateLimiter({
-  windowMs: process.env.API_KEY_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000, // 15 minutes
-  max: process.env.API_KEY_RATE_LIMIT_MAX || 1000, // 1000 requests per 15 minutes for API keys
-  message: process.env.API_KEY_RATE_LIMIT_MESSAGE || 'API rate limit exceeded, please try again later.'
-});
 
 module.exports = {
   generalLimiter,
   authLimiter,
-  apiKeyLimiter,
   createRateLimiter
 }; 

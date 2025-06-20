@@ -1,17 +1,102 @@
-import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { participantsAPI, eventsAPI } from "../services/api";
-import BackButton from "../components/BackButton";
+import { useAuth } from "../contexts/AuthContext";
+import PageLayout from "../components/PageLayout";
+import FormContainer from "../components/FormContainer";
+import FormInput from "../components/FormInput";
+import Button from "../components/Button";
+import LoadingSpinner from "../components/LoadingSpinner";
+import ErrorMessage from "../components/ErrorMessage";
+import Card from "../components/Card";
+import Badge from "../components/Badge";
+import EmptyState from "../components/EmptyState";
+
+// Memoized Participant Card Component
+const ParticipantCard = React.memo(({ participant, getStatusColor }) => {
+  const PeopleIcon = () => (
+    <svg
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      className="w-4 h-4 mr-2 flex-shrink-0"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
+      />
+    </svg>
+  );
+
+  return (
+    <Card hover>
+      <div className="p-4 sm:p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1 min-w-0">
+            <h4 className="text-lg font-medium text-gray-900 dark:text-white truncate">
+              {participant.fullName || `User ${participant.userId}`}
+            </h4>
+            {participant.email && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                {participant.email}
+              </p>
+            )}
+          </div>
+          <Badge
+            variant={getStatusColor(participant.status)}
+            size="small"
+            className="ml-2 flex-shrink-0"
+          >
+            {participant.status}
+          </Badge>
+        </div>
+
+        <div className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
+          <div className="flex items-center">
+            <PeopleIcon />
+            <span className="truncate">
+              {participant.type === "registered" ? "Registered User" : "Guest"}
+            </span>
+          </div>
+          {participant.joinedAt && (
+            <div className="flex items-center">
+              <svg
+                className="w-4 h-4 mr-2 flex-shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <span className="truncate">
+                Joined: {new Date(participant.joinedAt).toLocaleDateString()}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+});
 
 const EventParticipants = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [event, setEvent] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addFormData, setAddFormData] = useState({
-    type: "guest", // 'user' or 'guest'
+    type: "guest", // 'registered' or 'guest'
     email: "",
     fullName: "",
     userId: "",
@@ -19,11 +104,7 @@ const EventParticipants = () => {
   });
   const [adding, setAdding] = useState(false);
 
-  useEffect(() => {
-    fetchEventAndParticipants();
-  }, [id]);
-
-  const fetchEventAndParticipants = async () => {
+  const fetchEventAndParticipants = useCallback(async () => {
     try {
       setLoading(true);
       const [eventResponse, participantsResponse] = await Promise.all([
@@ -38,329 +119,311 @@ const EventParticipants = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
-  const handleAddFormChange = (e) => {
-    const { name, value } = e.target;
-    setAddFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+  useEffect(() => {
+    fetchEventAndParticipants();
+  }, [fetchEventAndParticipants]);
 
-  const handleAddParticipant = async (e) => {
-    e.preventDefault();
-    setAdding(true);
+  const isEventCreator = useCallback(() => {
+    return user && event && event.createdBy === user.id;
+  }, [user, event]);
 
-    try {
-      if (addFormData.type === "user") {
-        await participantsAPI.addRegisteredUser(id, {
-          userId: parseInt(addFormData.userId),
-          status: addFormData.status,
+  const getStatusColor = useCallback((status) => {
+    switch (status.toLowerCase()) {
+      case "confirmed":
+        return "success";
+      case "pending":
+        return "warning";
+      case "declined":
+        return "danger";
+      default:
+        return "default";
+    }
+  }, []);
+
+  const handleAddParticipant = useCallback(
+    async (e) => {
+      e.preventDefault();
+      try {
+        setAdding(true);
+        setError(null);
+
+        if (addFormData.type === "registered") {
+          await participantsAPI.addRegisteredUser(id, {
+            userId: parseInt(addFormData.userId),
+            status: addFormData.status,
+          });
+        } else {
+          await participantsAPI.addGuestUser(id, {
+            email: addFormData.email,
+            fullName: addFormData.fullName,
+            status: addFormData.status,
+          });
+        }
+
+        // Reset form
+        setAddFormData({
+          type: "guest",
+          email: "",
+          fullName: "",
+          userId: "",
+          status: "pending",
         });
-      } else {
-        await participantsAPI.addGuestUser(id, {
-          email: addFormData.email,
-          fullName: addFormData.fullName,
-          status: addFormData.status,
-        });
+        setShowAddForm(false);
+
+        // Re-fetch participants
+        await fetchEventAndParticipants();
+      } catch (err) {
+        const errorMessage =
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          "Failed to add participant";
+        setError(errorMessage);
+        console.error("Add participant error:", err);
+      } finally {
+        setAdding(false);
+      }
+    },
+    [id, addFormData, fetchEventAndParticipants]
+  );
+
+  // Memoize participants list to prevent unnecessary re-renders
+  const sortedParticipants = useMemo(() => {
+    return [...participants].sort((a, b) => {
+      // Sort by status: confirmed first, then pending, then declined
+      const statusOrder = { confirmed: 0, pending: 1, declined: 2 };
+      const statusA = statusOrder[a.status.toLowerCase()] ?? 3;
+      const statusB = statusOrder[b.status.toLowerCase()] ?? 3;
+
+      if (statusA !== statusB) {
+        return statusA - statusB;
       }
 
-      // Refresh participants list
-      await fetchEventAndParticipants();
-
-      // Reset form
-      setAddFormData({
-        type: "guest",
-        email: "",
-        fullName: "",
-        userId: "",
-        status: "pending",
-      });
-      setShowAddForm(false);
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to add participant");
-      console.error("Error adding participant:", err);
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  const handleStatusChange = async (participantId, newStatus) => {
-    try {
-      await participantsAPI.updateStatus(participantId, { status: newStatus });
-      await fetchEventAndParticipants();
-    } catch (err) {
-      setError("Failed to update participant status");
-      console.error("Error updating status:", err);
-    }
-  };
-
-  const handleRemoveParticipant = async (participantId) => {
-    if (!window.confirm("Are you sure you want to remove this participant?")) {
-      return;
-    }
-
-    try {
-      await participantsAPI.remove(participantId);
-      await fetchEventAndParticipants();
-    } catch (err) {
-      setError("Failed to remove participant");
-      console.error("Error removing participant:", err);
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "confirmed":
-        return "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200";
-      case "pending":
-        return "bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200";
-      case "declined":
-        return "bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200";
-      default:
-        return "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200";
-    }
-  };
+      // Then sort by name
+      const nameA = (a.fullName || `User ${a.userId}`).toLowerCase();
+      const nameB = (b.fullName || `User ${b.userId}`).toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  }, [participants]);
 
   if (loading) {
+    return <LoadingSpinner />;
+  }
+
+  if (!event) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
+      <PageLayout title="Event Not Found" maxWidth="4xl">
+        <ErrorMessage message="Event not found or you don't have permission to view it." />
+        <div className="mt-4">
+          <Button variant="secondary" onClick={() => navigate("/events")}>
+            Back to Events
+          </Button>
+        </div>
+      </PageLayout>
     );
   }
 
-  if (error && !event) {
+  if (!isEventCreator()) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-            Error
-          </h2>
-          <p className="text-gray-600 dark:text-gray-300 mb-6">{error}</p>
-          <Link
-            to="/events"
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors duration-200"
-          >
+      <PageLayout title="Access Denied" maxWidth="4xl">
+        <ErrorMessage message="You don't have permission to manage this event's participants." />
+        <div className="mt-4">
+          <Button variant="secondary" onClick={() => navigate("/events")}>
             Back to Events
-          </Link>
+          </Button>
         </div>
-      </div>
+      </PageLayout>
     );
   }
+
+  const PeopleIcon = (props) => (
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
+      />
+    </svg>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Top right back button */}
-        <div className="flex justify-end mb-6">
-          <BackButton variant="logo" to={`/events/${id}`} />
-        </div>
+    <PageLayout
+      title={`Participants - ${event.name}`}
+      subtitle="Manage event participants"
+      maxWidth="7xl"
+      showBackButton
+      backButtonProps={{ to: `/events/${id}` }}
+    >
+      <ErrorMessage message={error} className="mb-6" />
 
-        {/* Page title */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Event Participants
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Manage participants for {event?.name}
-          </p>
-        </div>
-
-        {/* Content */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          {/* Actions */}
-          <div className="flex justify-end mb-6">
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors duration-200"
-            >
-              Add Participant
-            </button>
-          </div>
-
-          {error && (
-            <div className="mb-4 bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
-              {error}
+      {/* Event Info */}
+      <Card className="mb-6">
+        <div className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                {event.name}
+              </h2>
+              <p className="text-gray-600 dark:text-gray-300 mt-1">
+                {event.description}
+              </p>
             </div>
-          )}
-
-          {/* Participants List */}
-          <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
-            <div className="px-4 py-5 sm:px-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">
-                Participants ({participants.length})
-              </h3>
+            <div className="flex items-center space-x-4">
+              <Badge variant="primary">
+                {sortedParticipants.length} participants
+              </Badge>
+              <Button
+                variant="primary"
+                size="small"
+                onClick={() => setShowAddForm(!showAddForm)}
+              >
+                {showAddForm ? "Cancel" : "Add Participant"}
+              </Button>
             </div>
-
-            {participants.length === 0 ? (
-              <div className="px-4 py-8 text-center">
-                <p className="text-gray-500 dark:text-gray-400">
-                  No participants yet. Add the first participant!
-                </p>
-              </div>
-            ) : (
-              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-                {participants.map((participant) => (
-                  <li key={participant.id} className="px-4 py-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {participant.participant_name ||
-                            participant.participant_email}
-                        </p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {participant.participant_email}
-                          {participant.participant_type === "registered" && (
-                            <span className="ml-2 text-blue-600 dark:text-blue-400">
-                              (Registered User)
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <select
-                          value={participant.status}
-                          onChange={(e) =>
-                            handleStatusChange(participant.id, e.target.value)
-                          }
-                          className="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="confirmed">Confirmed</option>
-                          <option value="declined">Declined</option>
-                        </select>
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                            participant.status
-                          )}`}
-                        >
-                          {participant.status}
-                        </span>
-                        <button
-                          onClick={() => handleRemoveParticipant(participant.id)}
-                          className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 text-sm font-medium transition-colors duration-200"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Add Participant Modal */}
+      {/* Add Participant Form */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 dark:bg-gray-900 dark:bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border border-gray-300 dark:border-gray-600 w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                Add Participant
-              </h3>
-              <form onSubmit={handleAddParticipant} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Participant Type
-                  </label>
-                  <select
-                    name="type"
-                    value={addFormData.type}
-                    onChange={handleAddFormChange}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  >
-                    <option value="guest">Guest User</option>
-                    <option value="user">Registered User</option>
-                  </select>
-                </div>
-
-                {addFormData.type === "guest" ? (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Full Name *
-                      </label>
-                      <input
-                        type="text"
-                        name="fullName"
-                        required
-                        value={addFormData.fullName}
-                        onChange={handleAddFormChange}
-                        className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Email *
-                      </label>
-                      <input
-                        type="email"
-                        name="email"
-                        required
-                        value={addFormData.email}
-                        onChange={handleAddFormChange}
-                        className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      User ID *
-                    </label>
-                    <input
-                      type="number"
-                      name="userId"
-                      required
-                      value={addFormData.userId}
-                      onChange={handleAddFormChange}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Status
-                  </label>
-                  <select
-                    name="status"
-                    value={addFormData.status}
-                    onChange={handleAddFormChange}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="confirmed">Confirmed</option>
-                    <option value="declined">Declined</option>
-                  </select>
-                </div>
-
-                <div className="flex justify-end space-x-4 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddForm(false)}
-                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={adding}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors duration-200"
-                  >
-                    {adding ? "Adding..." : "Add Participant"}
-                  </button>
-                </div>
-              </form>
+        <FormContainer className="mb-6">
+          <form onSubmit={handleAddParticipant}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Participant Type
+                </label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  value={addFormData.type}
+                  onChange={(e) =>
+                    setAddFormData((prev) => ({
+                      ...prev,
+                      type: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="guest">Guest</option>
+                  <option value="registered">Registered User</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Status
+                </label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  value={addFormData.status}
+                  onChange={(e) =>
+                    setAddFormData((prev) => ({
+                      ...prev,
+                      status: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="pending">Pending</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="declined">Declined</option>
+                </select>
+              </div>
             </div>
+
+            {addFormData.type === "registered" ? (
+              <FormInput
+                label="User ID"
+                id="userId"
+                name="userId"
+                type="text"
+                placeholder="Enter user ID"
+                value={addFormData.userId}
+                onChange={(e) =>
+                  setAddFormData((prev) => ({
+                    ...prev,
+                    userId: e.target.value,
+                  }))
+                }
+                required
+              />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormInput
+                  label="Full Name"
+                  id="fullName"
+                  name="fullName"
+                  type="text"
+                  placeholder="Enter full name"
+                  value={addFormData.fullName}
+                  onChange={(e) =>
+                    setAddFormData((prev) => ({
+                      ...prev,
+                      fullName: e.target.value,
+                    }))
+                  }
+                  required
+                />
+                <FormInput
+                  label="Email"
+                  id="email"
+                  name="email"
+                  type="email"
+                  placeholder="Enter email address"
+                  value={addFormData.email}
+                  onChange={(e) =>
+                    setAddFormData((prev) => ({
+                      ...prev,
+                      email: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-3 mt-4">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setShowAddForm(false)}
+                disabled={adding}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" loading={adding}>
+                {adding ? "Adding..." : "Add Participant"}
+              </Button>
+            </div>
+          </form>
+        </FormContainer>
+      )}
+
+      {/* Participants List */}
+      {sortedParticipants.length === 0 ? (
+        <EmptyState
+          icon={PeopleIcon}
+          title="No participants yet"
+          description="No one has joined this event yet. Add participants manually or share the event link."
+          action={
+            <Button variant="primary" onClick={() => setShowAddForm(true)}>
+              Add First Participant
+            </Button>
+          }
+        />
+      ) : (
+        <div className="overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            {sortedParticipants.map((participant) => (
+              <ParticipantCard
+                key={participant.id}
+                participant={participant}
+                getStatusColor={getStatusColor}
+              />
+            ))}
           </div>
         </div>
       )}
-    </div>
+    </PageLayout>
   );
 };
 

@@ -4,6 +4,7 @@ const { isLoggedIn } = require("../middleware/auth");
 const {
   register,
   login,
+  refresh,
   getCurrentUser,
   validateToken,
   logout,
@@ -12,6 +13,7 @@ const {
 // Public routes
 router.post("/register", register);
 router.post("/login", login);
+router.post("/refresh", refresh);
 
 // Protected routes
 router.get("/me", isLoggedIn, getCurrentUser);

@@ -9,14 +9,11 @@ const {
   removeParticipant,
 } = require("../controllers/participantController");
 
-// All routes require authentication
-router.use(isLoggedIn);
-
 // Participant routes
-router.get("/event/:eventId", getEventParticipants);
-router.post("/event/:eventId/user", addRegisteredParticipant);
-router.post("/event/:eventId/guest", addGuestParticipant);
-router.patch("/:participantId", updateParticipantStatus);
-router.delete("/:participantId", removeParticipant);
+router.get("/event/:eventId", isLoggedIn, getEventParticipants);
+router.post("/event/:eventId/user", isLoggedIn, addRegisteredParticipant);
+router.post("/event/:eventId/guest", isLoggedIn, addGuestParticipant);
+router.patch("/:participantId", isLoggedIn, updateParticipantStatus);
+router.delete("/:participantId", isLoggedIn, removeParticipant);
 
 module.exports = router; 

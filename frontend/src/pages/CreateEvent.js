@@ -1,7 +1,12 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { eventsAPI } from "../services/api";
-import BackButton from "../components/BackButton";
+import PageLayout from "../components/PageLayout";
+import FormContainer from "../components/FormContainer";
+import FormSection from "../components/FormSection";
+import FormInput from "../components/FormInput";
+import Button from "../components/Button";
+import ErrorMessage from "../components/ErrorMessage";
 
 const CreateEvent = () => {
   const navigate = useNavigate();
@@ -33,11 +38,17 @@ const CreateEvent = () => {
     setError(null);
 
     try {
-      // Convert form data to proper format
+      // Convert form data to proper format with snake_case field names
       const eventData = {
-        ...formData,
-        minAttendees: parseInt(formData.minAttendees) || 0,
-        maxAttendees: parseInt(formData.maxAttendees) || 0,
+        name: formData.name,
+        description: formData.description,
+        start_datetime: formData.startDatetime,
+        end_datetime: formData.endDatetime,
+        location: formData.location,
+        min_attendees: parseInt(formData.minAttendees) || 0,
+        max_attendees: parseInt(formData.maxAttendees) || 0,
+        location_details: formData.locationDetails,
+        preparation_info: formData.preparationInfo,
       };
 
       await eventsAPI.create(eventData);
@@ -51,253 +62,150 @@ const CreateEvent = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Top right back button */}
-        <div className="flex justify-end mb-6">
-          <BackButton variant="logo" to="/events" />
-        </div>
+    <PageLayout
+      title="Create New Event"
+      subtitle="Set up your event details"
+      showBackButton
+      backButtonProps={{ variant: "logo", to: "/events" }}
+    >
+      <ErrorMessage message={error} className="mb-6" />
 
-        {/* Page title */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Create New Event
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Set up your event details
-          </p>
-        </div>
+      <FormContainer>
+        <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8">
+          {/* Basic Information */}
+          <FormSection title="Basic Information">
+            <FormInput
+              label="Event Name"
+              id="name"
+              name="name"
+              type="text"
+              required
+              value={formData.name}
+              onChange={handleChange}
+            />
 
-        {error && (
-          <div className="mb-4 bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
-            {error}
+            <FormInput
+              label="Description"
+              id="description"
+              name="description"
+              type="textarea"
+              required
+              value={formData.description}
+              onChange={handleChange}
+            />
+          </FormSection>
+
+          {/* Date and Time */}
+          <FormSection title="Date and Time">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+              <FormInput
+                label="Start Date & Time"
+                id="startDatetime"
+                name="startDatetime"
+                type="datetime-local"
+                required
+                value={formData.startDatetime}
+                onChange={handleChange}
+              />
+
+              <FormInput
+                label="End Date & Time"
+                id="endDatetime"
+                name="endDatetime"
+                type="datetime-local"
+                required
+                value={formData.endDatetime}
+                onChange={handleChange}
+              />
+            </div>
+          </FormSection>
+
+          {/* Location */}
+          <FormSection title="Location">
+            <FormInput
+              label="Location"
+              id="location"
+              name="location"
+              type="text"
+              required
+              placeholder="e.g., Conference Room A, Main Hall"
+              value={formData.location}
+              onChange={handleChange}
+            />
+
+            <FormInput
+              label="Location Details"
+              id="locationDetails"
+              name="locationDetails"
+              type="textarea"
+              rows={3}
+              placeholder="Additional location information, directions, etc."
+              value={formData.locationDetails}
+              onChange={handleChange}
+            />
+          </FormSection>
+
+          {/* Attendees */}
+          <FormSection title="Attendees">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+              <FormInput
+                label="Minimum Attendees"
+                id="minAttendees"
+                name="minAttendees"
+                type="number"
+                min="0"
+                value={formData.minAttendees}
+                onChange={handleChange}
+              />
+
+              <FormInput
+                label="Maximum Attendees"
+                id="maxAttendees"
+                name="maxAttendees"
+                type="number"
+                min="0"
+                value={formData.maxAttendees}
+                onChange={handleChange}
+              />
+            </div>
+          </FormSection>
+
+          {/* Additional Information */}
+          <FormSection title="Additional Information">
+            <FormInput
+              label="Preparation Information"
+              id="preparationInfo"
+              name="preparationInfo"
+              type="textarea"
+              rows={4}
+              placeholder="What participants should bring, wear, or prepare for the event"
+              value={formData.preparationInfo}
+              onChange={handleChange}
+            />
+          </FormSection>
+
+          {/* Form Actions */}
+          <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4 pt-6 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => navigate("/events")}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              loading={loading}
+              disabled={loading}
+              className="w-full sm:w-auto"
+            >
+              {loading ? "Creating..." : "Create Event"}
+            </Button>
           </div>
-        )}
-
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            {/* Basic Information */}
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                Basic Information
-              </h3>
-              <div className="grid grid-cols-1 gap-6">
-                <div>
-                  <label
-                    htmlFor="name"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    Event Name *
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    required
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    value={formData.name}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="description"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    Description *
-                  </label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    rows={4}
-                    required
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    value={formData.description}
-                    onChange={handleChange}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Date and Time */}
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                Date and Time
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label
-                    htmlFor="startDatetime"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    Start Date & Time *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    id="startDatetime"
-                    name="startDatetime"
-                    required
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    value={formData.startDatetime}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="endDatetime"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    End Date & Time *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    id="endDatetime"
-                    name="endDatetime"
-                    required
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    value={formData.endDatetime}
-                    onChange={handleChange}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Location */}
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                Location
-              </h3>
-              <div className="grid grid-cols-1 gap-6">
-                <div>
-                  <label
-                    htmlFor="location"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    Location *
-                  </label>
-                  <input
-                    type="text"
-                    id="location"
-                    name="location"
-                    required
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    placeholder="e.g., Conference Room A, Main Hall"
-                    value={formData.location}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="locationDetails"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    Location Details
-                  </label>
-                  <textarea
-                    id="locationDetails"
-                    name="locationDetails"
-                    rows={3}
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    placeholder="Additional location information, directions, etc."
-                    value={formData.locationDetails}
-                    onChange={handleChange}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Attendees */}
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                Attendees
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label
-                    htmlFor="minAttendees"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    Minimum Attendees
-                  </label>
-                  <input
-                    type="number"
-                    id="minAttendees"
-                    name="minAttendees"
-                    min="0"
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    value={formData.minAttendees}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="maxAttendees"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    Maximum Attendees
-                  </label>
-                  <input
-                    type="number"
-                    id="maxAttendees"
-                    name="maxAttendees"
-                    min="0"
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    value={formData.maxAttendees}
-                    onChange={handleChange}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Additional Information */}
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                Additional Information
-              </h3>
-              <div>
-                <label
-                  htmlFor="preparationInfo"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  Preparation Information
-                </label>
-                <textarea
-                  id="preparationInfo"
-                  name="preparationInfo"
-                  rows={4}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  placeholder="What participants should bring, wear, or prepare for the event"
-                  value={formData.preparationInfo}
-                  onChange={handleChange}
-                />
-              </div>
-            </div>
-
-            {/* Form Actions */}
-            <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200 dark:border-gray-700">
-              <button
-                type="button"
-                onClick={() => navigate("/events")}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-colors duration-200"
-              >
-                {loading ? "Creating..." : "Create Event"}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+        </form>
+      </FormContainer>
+    </PageLayout>
   );
 };
 

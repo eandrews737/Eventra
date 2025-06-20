@@ -25,14 +25,14 @@ const getEventParticipants = async (req, res) => {
       },
     });
 
-    // Transform the data to match the expected format
+    // Transform the data to return normal field names
     const formattedParticipants = participants.map((p) => ({
       id: p.id,
       status: p.status,
       created_at: p.createdAt,
-      participant_name: p.user?.fullName || p.guest?.fullName,
-      participant_email: p.user?.email || p.guest?.email,
-      participant_type: p.user ? "registered" : "guest",
+      fullName: p.user?.fullName || p.guest?.fullName,
+      email: p.user?.email || p.guest?.email,
+      type: p.user ? "registered" : "guest",
     }));
 
     res.json(formattedParticipants);
@@ -46,13 +46,19 @@ const addRegisteredParticipant = async (req, res) => {
   const { userId, status = "pending" } = req.body;
 
   try {
-    // Check if event exists
+    // Check if event exists and get creator info
     const event = await prisma.event.findUnique({
       where: { id: parseInt(req.params.eventId) },
+      select: { id: true, createdBy: true },
     });
 
     if (!event) {
       return res.status(404).json({ error: "Event not found" });
+    }
+
+    // Check if current user is the event creator
+    if (event.createdBy !== req.user.id) {
+      return res.status(403).json({ error: "Only event creators can manage participants" });
     }
 
     // Check if user exists
@@ -95,13 +101,19 @@ const addGuestParticipant = async (req, res) => {
   const { email, fullName, status = "pending" } = req.body;
 
   try {
-    // Check if event exists
+    // Check if event exists and get creator info
     const event = await prisma.event.findUnique({
       where: { id: parseInt(req.params.eventId) },
+      select: { id: true, createdBy: true },
     });
 
     if (!event) {
       return res.status(404).json({ error: "Event not found" });
+    }
+
+    // Check if current user is the event creator
+    if (event.createdBy !== req.user.id) {
+      return res.status(403).json({ error: "Only event creators can manage participants" });
     }
 
     // Create guest user and add as participant in a transaction
@@ -139,14 +151,33 @@ const updateParticipantStatus = async (req, res) => {
   }
 
   try {
-    const participant = await prisma.eventParticipant.update({
+    // Get participant with event info to check permissions
+    const participant = await prisma.eventParticipant.findUnique({
+      where: { id: parseInt(req.params.participantId) },
+      include: {
+        event: {
+          select: { createdBy: true },
+        },
+      },
+    });
+
+    if (!participant) {
+      return res.status(404).json({ error: "Participant not found" });
+    }
+
+    // Check if current user is the event creator or the participant themselves
+    if (participant.event.createdBy !== req.user.id && participant.userId !== req.user.id) {
+      return res.status(403).json({ error: "You can only update your own participation status or manage participants as an event creator" });
+    }
+
+    const updatedParticipant = await prisma.eventParticipant.update({
       where: { id: parseInt(req.params.participantId) },
       data: {
         status: status,
       },
     });
 
-    res.json(participant);
+    res.json(updatedParticipant);
   } catch (error) {
     console.error("Error updating participant:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -155,6 +186,25 @@ const updateParticipantStatus = async (req, res) => {
 
 const removeParticipant = async (req, res) => {
   try {
+    // Get participant with event info to check permissions
+    const participant = await prisma.eventParticipant.findUnique({
+      where: { id: parseInt(req.params.participantId) },
+      include: {
+        event: {
+          select: { createdBy: true },
+        },
+      },
+    });
+
+    if (!participant) {
+      return res.status(404).json({ error: "Participant not found" });
+    }
+
+    // Check if current user is the event creator or the participant themselves
+    if (participant.event.createdBy !== req.user.id && participant.userId !== req.user.id) {
+      return res.status(403).json({ error: "You can only remove yourself from an event or manage participants as an event creator" });
+    }
+
     await prisma.eventParticipant.delete({
       where: { id: parseInt(req.params.participantId) },
     });

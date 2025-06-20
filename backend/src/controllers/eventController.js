@@ -3,34 +3,131 @@ const prisma = require("../config/prisma");
 const getAllEvents = async (req, res) => {
   try {
     const events = await prisma.event.findMany({
+      orderBy: { startDatetime: "asc" },
       include: {
         creator: {
           select: {
+            id: true,
             fullName: true,
           },
         },
-        participants: {
-          select: {
-            id: true,
-          },
-        },
-      },
-      orderBy: {
-        startDatetime: "desc",
       },
     });
 
-    // Add participant count to each event
-    const eventsWithParticipantCount = events.map(event => ({
-      ...event,
-      participantCount: event.participants.length,
-      participants: undefined, // Remove the participants array from response
-    }));
+    // Add participation status to each event for the current user
+    const eventsWithStatus = await Promise.all(
+      events.map(async (event) => {
+        // Get participant data directly for this event and user
+        const participant = await prisma.eventParticipant.findFirst({
+          where: {
+            eventId: event.id,
+            userId: req.user?.id,
+          },
+          select: { id: true, status: true },
+        });
 
-    res.json(eventsWithParticipantCount);
+        const isParticipant = !!participant;
+        const participationStatus = participant?.status || null;
+        const participantId = participant?.id || null;
+
+        // Get total participant count for this event
+        const totalParticipantCount = await prisma.eventParticipant.count({
+          where: { eventId: event.id },
+        });
+
+        // Remove the participants array from the final object to keep the payload clean
+        const { participants, ...eventData } = event;
+        return {
+          ...eventData,
+          createdBy: event.createdBy, // Explicitly include createdBy field
+          isParticipant,
+          participationStatus,
+          participantId,
+          participantCount: totalParticipantCount,
+        };
+      })
+    );
+
+    res.json(eventsWithStatus);
   } catch (error) {
     console.error("Error fetching events:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error fetching events" });
+  }
+};
+
+const getDashboardEvents = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const currentDate = new Date();
+
+    // Get events that the user has either created OR joined
+    const events = await prisma.event.findMany({
+      where: {
+        AND: [
+          {
+            OR: [
+              // Events created by the user
+              { createdBy: userId },
+              // Events the user is participating in (as registered user)
+              { participants: { some: { userId: userId } } },
+            ],
+          },
+          // Only future events
+          { startDatetime: { gt: currentDate } },
+        ],
+      },
+      orderBy: { startDatetime: "asc" },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+    });
+
+    // Add createdBy field and participation status to each event
+    const eventsWithStatus = await Promise.all(
+      events.map(async (event) => {
+        // Get participant data directly for this event and user
+        const participant = await prisma.eventParticipant.findFirst({
+          where: {
+            eventId: event.id,
+            userId: userId,
+          },
+          select: { id: true, status: true },
+        });
+
+        const isParticipant = !!participant;
+        const participationStatus = participant?.status || null;
+        const participantId = participant?.id || null;
+
+        // Get total participant count for this event
+        const totalParticipantCount = await prisma.eventParticipant.count({
+          where: { eventId: event.id },
+        });
+
+        // Remove the participants array from the final object to keep the payload clean
+        const { participants, ...eventData } = event;
+
+        const eventWithStatus = {
+          ...eventData,
+          createdBy: event.createdBy, // Explicitly include createdBy field
+          isParticipant,
+          participationStatus,
+          participantId,
+          participantCount: totalParticipantCount,
+        };
+
+        return eventWithStatus;
+      })
+    );
+
+    res.json(eventsWithStatus);
+  } catch (error) {
+    console.error("Error fetching dashboard events:", error);
+    res.status(500).json({ error: "Error fetching dashboard events" });
   }
 };
 
@@ -41,12 +138,8 @@ const getEventById = async (req, res) => {
       include: {
         creator: {
           select: {
-            fullName: true,
-          },
-        },
-        participants: {
-          select: {
             id: true,
+            fullName: true,
           },
         },
       },
@@ -56,17 +149,41 @@ const getEventById = async (req, res) => {
       return res.status(404).json({ error: "Event not found" });
     }
 
-    // Add participant count to the event
-    const eventWithParticipantCount = {
-      ...event,
-      participantCount: event.participants.length,
-      participants: undefined, // Remove the participants array from response
+    // Get total participant count
+    const totalParticipantCount = await prisma.eventParticipant.count({
+      where: { eventId: parseInt(req.params.id) },
+    });
+
+    // Get participant data directly for this event and user
+    const participant = await prisma.eventParticipant.findFirst({
+      where: {
+        eventId: parseInt(req.params.id),
+        userId: req.user?.id,
+      },
+      select: { id: true, status: true },
+    });
+
+    // Add participant count and participation status to the event
+    const isParticipant = !!participant;
+    const participationStatus = participant?.status || null;
+    const participantId = participant?.id || null;
+
+    // Remove the participants array from the final object to keep the payload clean
+    const { participants, ...eventData } = event;
+
+    const eventWithParticipantInfo = {
+      ...eventData,
+      createdBy: event.createdBy, // Explicitly include createdBy field
+      participantCount: totalParticipantCount,
+      isParticipant,
+      participationStatus,
+      participantId,
     };
 
-    res.json(eventWithParticipantCount);
+    res.json(eventWithParticipantInfo);
   } catch (error) {
     console.error("Error fetching event:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error fetching event" });
   }
 };
 
@@ -208,14 +325,73 @@ const deleteEvent = async (req, res) => {
     res.status(204).send();
   } catch (error) {
     console.error("Error deleting event:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error deleting event" });
+  }
+};
+
+const joinEvent = async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id, 10);
+    const userId = req.user.id;
+
+    // Check if the user is already a participant
+    const existingParticipant = await prisma.eventParticipant.findFirst({
+      where: { eventId, userId },
+    });
+
+    if (existingParticipant) {
+      return res
+        .status(409)
+        .json({ message: "You are already participating in this event." });
+    }
+
+    // Add the user as a participant
+    const newParticipant = await prisma.eventParticipant.create({
+      data: {
+        eventId,
+        userId,
+        status: "confirmed", // Changed from "attending" to "confirmed" to match the schema
+      },
+    });
+
+    res.status(201).json(newParticipant);
+  } catch (error) {
+    console.error("Error joining event:", error);
+    res.status(500).json({ error: "Error joining event" });
+  }
+};
+
+const getCurrentUserParticipantId = async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id, 10);
+    const userId = req.user.id;
+
+    // Find the current user's participation in this event
+    const participant = await prisma.eventParticipant.findFirst({
+      where: { eventId, userId },
+      select: { id: true, status: true },
+    });
+
+    if (!participant) {
+      return res
+        .status(404)
+        .json({ error: "You are not participating in this event." });
+    }
+
+    res.json({ participantId: participant.id, status: participant.status });
+  } catch (error) {
+    console.error("Error getting participant ID:", error);
+    res.status(500).json({ error: "Error getting participant ID" });
   }
 };
 
 module.exports = {
   getAllEvents,
+  getDashboardEvents,
   getEventById,
   createEvent,
   updateEvent,
   deleteEvent,
+  joinEvent,
+  getCurrentUserParticipantId,
 };
